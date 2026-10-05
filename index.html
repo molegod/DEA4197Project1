@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Common Ground</title>
+    <meta name="description" content="Prey flock, hunters hunt, and the ground remembers where they went. An emergent ecosystem from simple rules." />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2311181a'/%3E%3Cpath d='M26 16 9 24l4-8-4-8z' fill='%23ff6a3d'/%3E%3C/svg%3E" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="style.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <canvas id="stage" aria-label="Simulation: prey and hunters moving over shifting terrain"></canvas>
+
+    <aside id="hud" class="panel">
+      <header>
+        <h1>Common Ground</h1>
+        <p class="sub">Prey, hunters, and the ground they wear down</p>
+      </header>
+
+      <div class="tiles">
+        <div class="tile">
+          <div class="tile-label"><span class="key prey"></span>Prey</div>
+          <div class="tile-value" id="prey-count">0</div>
+          <canvas class="spark" id="prey-spark" aria-label="Prey population over the last five minutes"></canvas>
+          <div class="tip" id="prey-tip" hidden></div>
+        </div>
+        <div class="tile">
+          <div class="tile-label"><span class="key hunters"></span>Hunters</div>
+          <div class="tile-value" id="hunter-count">0</div>
+          <canvas class="spark" id="hunter-spark" aria-label="Hunter population over the last five minutes"></canvas>
+          <div class="tip" id="hunter-tip" hidden></div>
+        </div>
+      </div>
+      <p class="legend" id="legend"></p>
+
+      <div id="traits"></div>
+      <footer id="hud-foot"></footer>
+    </aside>
+
+    <nav id="controls" aria-label="Controls">
+      <p class="hints">
+        <kbd>drag a creature</kbd> pick up &amp; throw · <kbd>drag</kbd> orbit · <kbd>right-drag</kbd> pan · <kbd>scroll</kbd> zoom ·
+        <kbd>g</kbd> follow · <kbd>o</kbd> auto-orbit · <kbd>0</kbd> reset view · <kbd>1</kbd> <kbd>2</kbd> add prey / hunter ·
+        <kbd>space</kbd> pause · <kbd>f</kbd> speed · <kbd>c</kbd> color · <kbd>t</kbd> scent · <kbd>r</kbd> new world ·
+        <kbd>i</kbd> panel · <kbd>v</kbd> record
+      </p>
+      <div class="buttons">
+        <button id="btn-hands" aria-pressed="false">✋ Hands</button>
+        <button id="btn-rules">? Rules</button>
+      </div>
+    </nav>
+
+    <div id="camera" hidden>
+      <video playsinline muted></video>
+      <canvas></canvas>
+      <p class="status"></p>
+    </div>
+
+    <div id="rules" hidden>
+      <article class="panel">
+        <button id="rules-close" aria-label="Close">×</button>
+        <h2>The rules</h2>
+        <p class="lede">Nobody is in charge. Each creature only looks at what's right around it.</p>
+        <div class="cols">
+          <section>
+            <h3><span class="key prey"></span>Prey</h3>
+            <ul>
+              <li>Stay near your neighbours, don't bump into them, and go the way they go.</li>
+              <li>See a hunter? Run. A neighbour panicking? Panic too.</li>
+              <li>Hungry: head for grass. Full: walk the worn paths, they're easier.</li>
+              <li>Thirsty: walk downhill to the water and drink.</li>
+            </ul>
+            <h3><span class="key hunters"></span>Hunters</h3>
+            <ul>
+              <li>Keep away from other hunters.</li>
+              <li>Chase the nearest prey you can see. Tall grass hides prey, and lunging into a crowd often misses.</li>
+              <li>Nothing in sight? Follow fresh prey tracks.</li>
+            </ul>
+          </section>
+          <section>
+            <h3>Everyone</h3>
+            <ul>
+              <li>Moving costs energy, eating gives it back. Run out and you die.</li>
+              <li>With enough energy you split in two. The child's genes (speed, eyesight, nerve…) come out slightly different.</li>
+            </ul>
+            <h3>The ground</h3>
+            <ul>
+              <li>The hills slowly shift. Uphill is slow, water counts as uphill, and low ground pulls you in.</li>
+              <li>Like water: moving fast picks up dirt, some gets kicked aside, slowing down drops the rest. Busy routes sink into paths, and paths pull in more walkers.</li>
+              <li>Grass regrows, fastest near water. Trampled ground stays bare.</li>
+            </ul>
+          </section>
+        </div>
+        <h3>Watch for</h3>
+        <p class="watch">Gullies worn downhill toward the water · panic rippling through a herd · a red haze where hunters patrol, and grass
+          recovering there · booms and crashes in the population graphs · prey and hunters getting faster together.</p>
+      </article>
+    </div>
+
+    <div id="toast" role="status" aria-live="polite"></div>
+    <div id="rec" hidden>● REC</div>
+    <div id="fatal" hidden></div>
+
+    <script type="module" src="src/main.js"></script>
+  </body>
+</html>
