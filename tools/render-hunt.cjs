@@ -1,5 +1,5 @@
-// Renders the close-up teaser: the camera rides along with a hunter as it runs down a
-// prey, close enough to see everyone's eyes, and slows down for the catch. No captions.
+// Renders the teaser: it opens on the whole island, flies down to a hunter running a
+// prey down, close enough to see everyone's eyes, and slows for the catch. No captions.
 //
 //   npm i playwright-core                   (once, anywhere; point NODE_PATH at it if it's elsewhere)
 //   python3 -m http.server 8000             (from the project folder)
@@ -23,18 +23,24 @@ const { chromium } = require('playwright-core');
 const BASE = process.env.BASE || 'http://127.0.0.1:8000';
 const FPS = 20;
 
-// Simulation steps per frame: real time (3) for the chase, slow motion (1) for the lunge,
-// real time again for the aftermath. The catch itself lands on frame CATCH_FRAME.
+// Simulation steps per frame: real time (3) while the camera flies in, slow motion (1)
+// for the lunge, real time again for the aftermath. The catch lands on frame CATCH_FRAME.
 const SCHEDULE = [
-  ...Array(74).fill(3), 2, 2, 2, 2, 2, 2, // 4 s chase, camera pushing in
-  ...Array(30).fill(1), //                   1.5 s slow motion around the catch
-  2, 2, 2, 2, 2, 2, ...Array(34).fill(3), // 2 s aftermath
+  ...Array(62).fill(3), 2, 2, 2, 2, 2, 2, // 3.4 s: the whole island, then the dive in
+  ...Array(28).fill(1), //                   1.4 s slow motion around the catch
+  2, 2, 2, 2, ...Array(28).fill(3), //       1.6 s aftermath
 ];
-const CATCH_FRAME = 90;
+const CATCH_FRAME = 82;
 
 const ease = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
-// Camera distance: a medium shot of the herd, then a push in until the eyes fill the frame.
-const distanceAt = (f) => (f < 15 ? 230 : f < 65 ? 230 + (95 - 230) * ease((f - 15) / 50) : f < 110 ? 95 : 95 + (86 - 95) * ease((f - 110) / 40));
+// 0 = the whole island from above, 1 = right down among the creatures. Hold the wide
+// shot for a beat, fly in over about two seconds, then stay down there.
+const closeAt = (f) => ease((f - 16) / 46);
+// Far enough out to hold the island in frame, in until the eyes fill it, then a last creep.
+const distanceAt = (f) => {
+  const c = closeAt(f);
+  return 1250 + (95 - 1250) * c + (c >= 1 ? (86 - 95) * ease((f - 96) / 30) : 0);
+};
 
 async function open(seed) {
   const browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--enable-gpu', '--ignore-gpu-blocklist'] });
@@ -145,11 +151,12 @@ async function render(seed, catchStep, hunterId, heading, outDir = 'frames') {
         return Math.min(cx, cz, W - cx, H - cz);
       };
       const azim0 = base + (room(1) >= room(-1) ? 1 : -1) * 0.85;
-      const elev = 0.48;
+      // Looking down on the island to start with, levelling off as the camera comes in.
+      const WIDE = { x: 0, y: 40, z: 0 }, WIDE_ELEV = 0.62, CLOSE_ELEV = 0.48;
       const focus = { x: first.x - W / 2, y: groundY(first.x, first.y) + 7, z: first.y - H / 2 };
       let lift = 0;
 
-      window.huntFrame = (f, dist, steps) => {
+      window.huntFrame = (f, dist, close, steps) => {
         const hunter = sim.hunters.find((h) => h.id === hunterId);
         if (hunter) {
           let tx = hunter.x, ty = hunter.y;
@@ -170,20 +177,25 @@ async function render(seed, catchStep, hunterId, heading, outDir = 'frames') {
           focus.z += (ty - H / 2 - focus.z) * a;
           focus.y += (groundY(tx, ty) + 7 - focus.y) * a;
         }
+        // Aim at the middle of the island to begin with and travel onto the hunter.
+        const ax = WIDE.x + (focus.x - WIDE.x) * close;
+        const ay = WIDE.y + (focus.y - WIDE.y) * close;
+        const az = WIDE.z + (focus.z - WIDE.z) * close;
+        const elev = WIDE_ELEV + (CLOSE_ELEV - WIDE_ELEV) * close;
         const azim = azim0 + f * 0.0012;
-        const cx = focus.x + dist * Math.cos(elev) * Math.sin(azim);
-        const cy = focus.y + dist * Math.sin(elev);
-        const cz = focus.z + dist * Math.cos(elev) * Math.cos(azim);
+        const cx = ax + dist * Math.cos(elev) * Math.sin(azim);
+        const cy = ay + dist * Math.sin(elev);
+        const cz = az + dist * Math.cos(elev) * Math.cos(azim);
         // Don't let a hill get between the camera and the action: lift the camera over it.
         let need = 0;
         for (let t = 0.15; t <= 1.0001; t += 0.05) {
-          const sx = focus.x + (cx - focus.x) * t + W / 2, sz = focus.z + (cz - focus.z) * t + H / 2;
+          const sx = ax + (cx - ax) * t + W / 2, sz = az + (cz - az) * t + H / 2;
           if (sx < 0 || sz < 0 || sx > W || sz > H) continue;
-          const g = groundY(sx, sz) + 6, line = focus.y + (cy - focus.y) * t;
-          if (g > line) need = Math.max(need, (g - focus.y) / t + focus.y - cy);
+          const g = groundY(sx, sz) + 6, line = ay + (cy - ay) * t;
+          if (g > line) need = Math.max(need, (g - ay) / t + ay - cy);
         }
         lift += (need - lift) * (need > lift ? 0.5 : 0.05);
-        cg.camera([cx, cy + lift, cz], [focus.x, focus.y, focus.z]);
+        cg.camera([cx, cy + lift, cz], [ax, ay, az]);
       };
       return document.fonts.ready.then(() => true);
     },
@@ -194,14 +206,14 @@ async function render(seed, catchStep, hunterId, heading, outDir = 'frames') {
   for (let f = 0; f < SCHEDULE.length; f++) {
     const steps = SCHEDULE[f];
     const caught = await page.evaluate(
-      ({ steps, f, dist }) => {
+      ({ steps, f, dist, close }) => {
         const cg = window.commonGround;
         cg.step(steps);
-        window.huntFrame(f, dist, steps);
+        window.huntFrame(f, dist, close, steps);
         cg.render();
         return cg.sim.kills.some((k) => k.step === cg.sim.steps);
       },
-      { steps, f, dist: distanceAt(f) },
+      { steps, f, dist: distanceAt(f), close: closeAt(f) },
     );
     if (f === CATCH_FRAME && !caught) console.warn(`no catch happened at step ${catchStep}; is this the same world?`);
     await page.screenshot({ path: `${outDir}/f${String(f).padStart(4, '0')}.jpg`, type: 'jpeg', quality: 92 });

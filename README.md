@@ -112,7 +112,7 @@ Needs a browser with WebGL2 (any current Chrome, Edge, Firefox or Safari). [Thre
 | `src/view/blobs.js` | the creatures as instanced blobs with eyes (and brows), catch poofs, cursor rings |
 | `src/hands.js` | webcam pinch detection with MediaPipe |
 | `src/hud.js` | population graphs and gene meters |
-| `tools/render-hunt.cjs` | finds a good hunt in a world and films it close up (this made the teaser) |
+| `tools/render-hunt.cjs` | finds a good hunt in a world, opens wide on the island and flies in to film it |
 | `tools/render-teaser.cjs` | renders a wide tour of the island frame by frame |
 
 The simulation is 2D (creatures move over a height map) and steps 60 times a second no matter the frame rate; the 3D view just
