@@ -4,7 +4,7 @@ Prey flock, hunters hunt, and the ground remembers where they went.
 
 ![Teaser](teaser/common-ground-teaser.gif)
 
-**Live:** https://molegod.github.io/DEA4197Project1/ (once GitHub Pages is switched on, see below)
+**Live:** [https://peterhci.com/3dboids](https://peterhci.com/3dboids)
 
 Two populations of little blob creatures live on an island in an open sea. The island is a different shape in every world, and
 its fractal-noise hills slowly reshape themselves. Nothing is in charge and nothing is scripted: every creature only reacts to
