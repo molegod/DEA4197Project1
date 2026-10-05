@@ -10,6 +10,8 @@ Two populations of little blob creatures live on an island in an open sea. The i
 
 You can orbit around the island, follow a single creature, and reach in with your mouse (or your hand, on a webcam) to pick creatures up and throw them.
 
+Webcam hand interaction is powered by mediapipe.
+
 ## Controls
 
 | Input | Does |
@@ -30,9 +32,6 @@ You can orbit around the island, follow a single creature, and reach in with you
 | `?` | rules |
 | `v` | record 12 seconds of video |
 
-To regenerate the teaser: serve the folder, then `node tools/render-hunt.cjs scan 314` to list the best hunts in that world and
-`node tools/render-hunt.cjs render …` to film one (both commands are printed for you, with the ffmpeg lines, at the top of the
-file).
 
 ## References
 
