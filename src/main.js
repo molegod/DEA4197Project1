@@ -35,7 +35,6 @@ const land = new Land(stage.scene, sim.world, stage.shade);
 const ocean = new Ocean(stage.scene, sim.world, stage.sky.uniforms);
 const blobs = new Blobs(stage.scene, stage.shade);
 stage.setWater(ocean);
-stage.hideFromWater(land.tufts);
 stage.hideFromWater(blobs.preyInk);
 stage.hideFromWater(blobs.hunterInk);
 const hud = new Hud($('#hud'));

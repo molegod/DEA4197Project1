@@ -121,8 +121,8 @@ ${NOISE_GLSL}
 uniform sampler2D uScene, uSceneDepth;
 uniform vec2 uResolution;
 uniform float uNear, uFar, uRefract;
-uniform float uClear, uBand, uBandSoft, uFoamWidth, uFoamScale, uFoamSpeed, uSky;
-uniform vec3 uShallow, uDeep, uFoam, uLight;
+uniform float uClear, uBand1, uBand2, uFoamWidth, uFoamScale, uFoamSpeed, uSky, uLineWidth, uLineStrength;
+uniform vec3 uShallow, uMid, uDeep, uFoam, uLight, uInk;
 varying vec3 vWorld;
 varying vec3 vSwellNormal;
 varying float vViewZ;
@@ -139,6 +139,12 @@ vec2 ripples(vec2 p, float lod) {
   RIP(-0.95,  0.30, 0.030 * pow(lod, 4.0),     1.15, 5.6)
   #undef RIP
   return g;
+}
+
+// Which band of water this is: the bottom showing through, the shallows, the middle,
+// or the deep. Decided outright, so two bands meet along an edge rather than a fade.
+int waterBand(float d) {
+  return d < uClear ? 0 : (d < uBand1 ? 1 : (d < uBand2 ? 2 : 3));
 }
 
 float sceneViewZ(vec2 uv) {
@@ -163,11 +169,16 @@ void main() {
   float depth = max(0.0, vViewZ - sceneViewZ(uvR));
   vec3 behind = texture2D(uScene, uvR).rgb;
 
-  // Flat bands of colour laid over the bottom: clear at the very edge, then one tone
-  // for the shallows and one for the deep.
-  // The bands are flat colours, so they have to be told what time of day it is.
-  vec3 band = mix(uShallow, uDeep, smoothstep(uBand - uBandSoft, uBand + uBandSoft, depth)) * uLight;
-  vec3 body = mix(behind, band, smoothstep(0.0, uClear, depth));
+  // Flat bands of colour over the bottom, told what time of day it is, and a line
+  // wherever one band meets the next.
+  int b = waterBand(depth);
+  vec3 body = b == 0 ? behind : (b == 1 ? uShallow : (b == 2 ? uMid : uDeep)) * uLight;
+  float ddx = dFdx(depth) * uLineWidth, ddy = dFdy(depth) * uLineWidth;
+  float line = 0.0;
+  if (waterBand(depth + ddx) != b) line = 1.0;
+  if (waterBand(depth - ddx) != b) line = 1.0;
+  if (waterBand(depth + ddy) != b) line = 1.0;
+  if (waterBand(depth - ddy) != b) line = 1.0;
 
   // A little sky at grazing angles, so the sea still sits under this sky. No sun
   // glitter: a regular highlight on a regular swell is what makes a sea look tiled.
@@ -184,6 +195,7 @@ void main() {
   float foam = smoothstep(grain - 0.07, grain + 0.07, edge);
 
   vec3 color = mix(mix(body, refl, f), uFoam * uLight, foam);
+  color = mix(color, uInk, line * uLineStrength * (1.0 - foam));
 
   // Far out, give way to the haze on the horizon so the sea has no edge.
   float haze = smoothstep(1200.0, 9000.0, dist);
@@ -219,14 +231,18 @@ export class Ocean {
       uFar: { value: 1 },
       uRefract: { value: O.refraction },
       uClear: { value: O.clear },
-      uBand: { value: O.band },
-      uBandSoft: { value: O.bandSoft },
+      uBand1: { value: O.band1 },
+      uBand2: { value: O.band2 },
+      uLineWidth: { value: CONFIG.view.lines.width },
+      uLineStrength: { value: CONFIG.view.lines.strength },
+      uInk: { value: new THREE.Color(CONFIG.palette.ink) },
       uFoamWidth: { value: O.foamWidth },
       uFoamScale: { value: O.foamScale },
       uFoamSpeed: { value: O.foamSpeed },
       uSky: { value: O.sky },
       uLight: { value: new THREE.Color(1, 1, 1) },
       uShallow: { value: new THREE.Color(O.shallow) },
+      uMid: { value: new THREE.Color(O.mid) },
       uDeep: { value: new THREE.Color(O.deep) },
       uFoam: { value: new THREE.Color(O.foam) },
     };

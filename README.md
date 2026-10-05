@@ -108,14 +108,13 @@ Needs a browser with WebGL2 (any current Chrome, Edge, Firefox or Safari). [Thre
 | `src/world.js` | the ground grid: hill height, moved dirt, grass, prey tracks, hunter scent |
 | `src/creatures.js` | the prey and hunter rules, genes, and the erosion rule |
 | `src/sim.js` | birth, death, catching, immigration, stats; runs without a browser |
-| `src/view/stage.js` | renderer, lights, camera, orbit controls, the bloom pass and the buffer the water refracts |
+| `src/view/stage.js` | renderer, lights, camera, orbit controls, and the buffer the water refracts |
 | `src/view/sky.js` | the procedural sky: the backdrop, the light that fills the shadows, and what the sea reflects |
 | `src/view/glsl.js` | the noise the shaders share: foam that scallops, wind that gusts, weather that drifts |
 | `src/view/daylight.js` | the clock: where the sun is, what colour it is, and what the sky does about it |
 | `src/view/shading.js` | the look every lit thing shares: cloud shadow, stepped light, backlight |
-| `src/view/dof.js` | the depth of field that makes the island read as something on a table |
 | `src/view/water.js` | the sea: Gerstner waves on a camera-centred grid, refraction, depth colour and surf |
-| `src/view/land.js` | the island: terrain mesh rebuilt from the simulation's grid, and the grass |
+| `src/view/land.js` | the island: its shape from the simulation's grid, its colour decided a pixel at a time |
 | `src/view/blobs.js` | the creatures as instanced blobs with eyes (and brows), catch poofs, cursor rings |
 | `src/hands.js` | webcam pinch detection with MediaPipe |
 | `src/hud.js` | population graphs and gene meters |
@@ -124,15 +123,23 @@ Needs a browser with WebGL2 (any current Chrome, Edge, Firefox or Safari). [Thre
 
 The simulation is 2D (creatures move over a height map) and steps 60 times a second no matter the frame rate; the 3D view just
 draws it. The terrain mesh's vertices are the simulation's grid cells, so grooves the creatures dig show up as real dips in the
-ground. Creatures, eyes and grass are instanced meshes, so a thousand blobs draw in a handful of calls.
+ground. Creatures and their eyes are instanced meshes, so a thousand blobs draw in a handful of calls.
 
 The island is the same noise as before, faded out into a sea bed by a mask that is itself made of noise — one field read around
 the compass for headlands and coves, one read across the board so it isn't a disc. How many creatures a world starts with is
 worked out from how much dry land that mask left.
 
-**How it's drawn.** Real ray tracing isn't available in a browser, so what actually makes the difference here is a procedural
-sky baked into a cube map, which lights every shaded side instead of a flat ambient term, and a filmic tone map with a bloom
-pass so bright things spill the way a camera does.
+**How it's drawn.** The island is drawn, not photographed. Nothing on the ground is a blend: the shader is handed the height,
+the grass, the dirt and the scent at each pixel and decides outright which of a dozen flat colours that pixel is — sand,
+meadow, lush, worn path, kicked-up dirt, rock, snow. Then it asks the same question a pixel or two away in each direction, and
+wherever the answer differs it draws a line. So the island is a set of flat regions with inked boundaries, and those boundaries
+are the shape of the simulation: the edge of a grazed patch, the rim of a gully, the line of a path.
+
+The sea is treated the same way. Three flat bands by depth, lines between them, and the bottom showing through only at the very
+edge. Nothing is blurred: there is no depth of field, and bloom is turned down to the point where only the sun itself glows.
+
+Underneath that, a procedural sky baked into a cube map lights every shaded side instead of a flat ambient term, and a filmic
+tone map brings the range back.
 
 The sea is painted rather than photographed. Four Gerstner waves displace a disc of triangles that is re-centred on the camera
 every frame, so the mesh is dense underfoot and coarse at the horizon. Before the water is drawn the scene goes into a
@@ -141,11 +148,6 @@ it — the bottom shows through at the very edge, then one tone for the shallows
 it breaks into foam whose edge is cut by drifting noise, so the shore scallops instead of repeating, and its width is measured
 in pixels rather than in depth, or a gently shelving beach would turn the line into a blanket. There is deliberately no sun
 glitter: a regular highlight on a regular swell is exactly what makes a sea look tiled.
-
-The grass is a tuft of tapered blades on every cell of the simulation's grid, wide enough to overlap its neighbours into a
-carpet, dark at the root and bright at the tip, with the lighter and darker patches of a real field coming from noise. Two long
-waves travel across the island so whole patches lean together, and the blades shrink as they are grazed. They are left out of
-the buffer the water refracts, since nothing growing above the waterline is under it.
 
 **The light.** One clock runs the whole picture. The sun climbs, crosses and sets over seven minutes, and the sky's three
 colours, the fill in the shadows, the exposure and the colour of the sea all come off the same few keyframes, so dusk turns the
@@ -158,15 +160,13 @@ and leaving the sky's fill alone, which is what a cloud actually does. It costs 
 scale than anything else here.
 
 **The drawing.** The ground takes its sunlight in three steps rather than a smooth ramp, with the edges between them jittered
-by noise so they wobble like a painted edge instead of following a contour. Grass and creatures catch a rim of light when the
-sun is behind them. Each creature is drawn round with a line — the same body, a little bigger, inside out, so all that shows of
+by noise so they wobble like a painted edge instead of following a contour. Creatures catch a rim of light when the sun is
+behind them. Each creature is drawn round with a line — the same body, a little bigger, inside out, so all that shows of
 it is the edge. And everything on screen takes its colour from one palette at the top of `config.js`, which is the cheapest way
 to look designed rather than assembled.
 
-Three of those — outlines, stepped light and depth of field — can stack up into something that reads as a filter applied to a
-3D scene rather than a picture. They are each deliberately understated for that reason.
-
-All of it is one extra half-size pass and one blur, and it leaves the frame about five times inside its budget.
+All of it is one extra half-size pass and a handful of texture reads, and it leaves the frame about five times inside its
+budget.
 
 To regenerate the teaser: serve the folder, then `node tools/render-hunt.cjs scan 314` to list the best hunts in that world and
 `node tools/render-hunt.cjs render …` to film one (both commands are printed for you, with the ffmpeg lines, at the top of the

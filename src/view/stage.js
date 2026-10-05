@@ -11,12 +11,10 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { CONFIG } from '../config.js';
 import { Sky, SUN_DIR } from './sky.js';
 import { Daylight } from './daylight.js';
 import { shadingUniforms } from './shading.js';
-import { DepthOfFieldShader } from './dof.js';
 
 export class Stage {
   constructor(canvas, { width, height }) {
@@ -88,11 +86,6 @@ export class Stage {
       new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }),
     );
     this.composer.addPass(new RenderPass(scene, this.camera));
-    this.dof = new ShaderPass(DepthOfFieldShader);
-    this.dof.uniforms.uStrength.value = CONFIG.view.dof.strength;
-    this.dof.uniforms.uRange.value = CONFIG.view.dof.range;
-    this.dof.uniforms.uMaxBlur.value = CONFIG.view.dof.maxBlur;
-    this.composer.addPass(this.dof);
     this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), B.strength, B.radius, B.threshold);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
@@ -131,7 +124,6 @@ export class Stage {
       this.water.uniforms.uNear.value = this.camera.near;
       this.water.uniforms.uFar.value = this.camera.far;
     }
-    this.dof.uniforms.uTexel.value.set(1 / (w * dpr), 1 / (h * dpr));
     this.camera.aspect = w / h;
     // Keep the whole board in view on narrow screens.
     this.camera.fov = w / h < 1 ? 58 : 36;
@@ -161,7 +153,6 @@ export class Stage {
     this.water = ocean;
     ocean.uniforms.uScene.value = this.sceneTarget.texture;
     ocean.uniforms.uSceneDepth.value = this.sceneTarget.depthTexture;
-    this.dof.uniforms.tDepth.value = this.sceneTarget.depthTexture;
     this.resize();
   }
 
@@ -180,10 +171,6 @@ export class Stage {
 
     if (this.water) this.water.uniforms.uLight.value.copy(this.daylight.light);
 
-    // Focus on whatever the camera is pointed at.
-    this.dof.uniforms.uFocus.value = this.camera.position.distanceTo(this.controls.target);
-    this.dof.uniforms.uNear.value = this.camera.near;
-    this.dof.uniforms.uFar.value = this.camera.far;
     this.renderer.shadowMap.needsUpdate = true;
     if (this.water) {
       this.water.surface.visible = false;

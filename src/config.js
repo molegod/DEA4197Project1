@@ -154,7 +154,8 @@ export const CONFIG = {
     lush: 0x4d8a3a,
     bed: 0xcbb98c,       // the sea bed, in the shallows…
     bedDeep: 0x7d7560,   // …and further down
-    seaShallow: 0x43bfc0,
+    seaShallow: 0x5fd0cc,
+    seaMid: 0x2a8fb0,
     seaDeep: 0x15577f,
     foam: 0xdff0f3,
     ink: 0x25262b,       // outlines, and the strokes along a worn path
@@ -170,14 +171,6 @@ export const CONFIG = {
     preySize: [7.2, 9],   // blob width, height
     hunterSize: [10.5, 14],
 
-    // The grass.
-    grass: {
-      height: [6, 11],    // blade height in view units, per tuft
-      hue: 0.22,          // base hue; lightness comes from big noise patches
-      root: [0.4, 0.46, 0.34],  // the blade's colour is multiplied by this at the root…
-      tip: [1.3, 1.36, 0.92],   // …and by this at the tip
-    },
-
     // The sea around the island.
     ocean: {
       size: 24000,        // how far the water reaches (the sky dome is further still)
@@ -187,13 +180,14 @@ export const CONFIG = {
       steepness: 0.6,     // how much crests gather, Gerstner's Q
       refraction: 0.03,   // how far the surface bends what is behind it, in screens
       clear: 7,           // depth over which the bottom stops showing through
-      band: 26,           // depth where the shallow colour gives way to the deep one
-      bandSoft: 15,       // how soft that change is; small numbers make hard bands
+      band1: 14,          // depth where the shallows give way to the middle water…
+      band2: 34,          // …and where that gives way to the deep
       foamWidth: 11,      // how wide the line of foam is, in pixels on screen
       foamScale: 0.035,   // size of the scallops in the foam's edge
       foamSpeed: 1.1,     // how fast they drift
-      sky: 0.45,          // how much sky the surface picks up at grazing angles
-      shallow: 0x3fc2c8,  // the colour over the shallows
+      sky: 0.25,          // how much sky the surface picks up at grazing angles
+      shallow: 0x5fd0cc,  // the colour over the shallows
+      mid: 0x2a8fb0,      // …further out…
       deep: 0x12577e,     // …and over deep water
       foam: 0xd9eef3,
       floor: 0x6b6450,    // the sea bed outside the board
@@ -235,14 +229,15 @@ export const CONFIG = {
     // following a perfect contour.
     toon: { steps: 3, jitter: 0.1, jitterScale: 0.02, floor: 0.32 },
 
-    // Sun coming through a blade of grass, or round the edge of a creature.
+    // Light coming round the edge of a creature that has the sun behind it.
     rim: { power: 2.2, strength: 0.75 },
 
     // A drawn line round the creatures.
     outline: { thickness: 0.22, opacity: 0.8 },
 
-    // Enough depth of field to read as something small on a table.
-    dof: { strength: 1, range: 1200, maxBlur: 4 },
+
+    // A drawn line wherever one colour meets another: on the ground, and in the sea.
+    lines: { width: 1.7, strength: 0.8 },
 
     // What the ground remembers, drawn rather than tinted.
     ink: {
@@ -252,7 +247,7 @@ export const CONFIG = {
     },
 
     // Post-processing.
-    bloom: { strength: 0.3, radius: 0.45, threshold: 0.95 },
+    bloom: { strength: 0.12, radius: 0.2, threshold: 1 },
     exposure: 0.95,
   },
 
