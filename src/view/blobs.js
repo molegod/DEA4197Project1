@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 import { PREY, HUNTER } from '../creatures.js';
+import { applyShading } from './shading.js';
 
 export const COLOR_MODES = ['family', 'speed', 'vision'];
 
@@ -35,7 +36,7 @@ const unit = (kind, gene, v) => {
 };
 
 export class Blobs {
-  constructor(scene) {
+  constructor(scene, shade) {
     const body = bodyGeometry();
     const eye = new THREE.SphereGeometry(1, 12, 8);
     const brow = new THREE.BoxGeometry(1, 1, 1);
@@ -49,10 +50,32 @@ export class Blobs {
       scene.add(m);
       return m;
     };
-    this.prey = mk(body, new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0 }), MAX_PREY, true);
+    const skin = (roughness) => applyShading(new THREE.MeshStandardMaterial({ roughness, metalness: 0 }), shade, { rim: true, clouds: true });
+    this.prey = mk(body, skin(0.55), MAX_PREY, true);
     this.preyEyes = mk(eye, eyeMat, MAX_PREY * 2, false);
-    this.hunters = mk(body, new THREE.MeshStandardMaterial({ roughness: 0.5, metalness: 0 }), MAX_HUNTERS, true);
+    this.hunters = mk(body, skin(0.5), MAX_HUNTERS, true);
     this.hunterEyes = mk(eye, eyeMat, MAX_HUNTERS * 2, false);
+
+    // A drawn line round each creature: the same body, a shade bigger, inside out, so
+    // all that shows of it is a rim where the real one ends.
+    const O = CONFIG.view.outline;
+    const inkMat = () => {
+      const m = new THREE.MeshBasicMaterial({ color: CONFIG.palette.ink, side: THREE.BackSide, transparent: O.opacity < 1, opacity: O.opacity });
+      m.onBeforeCompile = (shader) => {
+        shader.uniforms.uThickness = { value: O.thickness };
+        shader.vertexShader = shader.vertexShader
+          .replace('#include <common>', '#include <common>\nuniform float uThickness;')
+          // The instance matrix scales the blob, so take that out: the line should be
+          // the same weight on a newborn as on a grown hunter.
+          .replace('#include <begin_vertex>', '#include <begin_vertex>\nfloat sc = max(length(instanceMatrix[0].xyz), 0.001);\ntransformed += normalize(normal) * (uThickness / sc);');
+      };
+      return m;
+    };
+    // Same instances as the bodies, so there is nothing extra to keep in step.
+    this.preyInk = mk(body, inkMat(), MAX_PREY, false);
+    this.preyInk.instanceMatrix = this.prey.instanceMatrix;
+    this.hunterInk = mk(body, inkMat(), MAX_HUNTERS, false);
+    this.hunterInk.instanceMatrix = this.hunters.instanceMatrix;
     this.brows = mk(brow, eyeMat, MAX_HUNTERS * 2, false);
     this.poofs = mk(new THREE.SphereGeometry(1, 10, 8), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 }), POOF_BITS * MAX_POOFS, false);
     // Allocate per-instance colors.
@@ -112,6 +135,8 @@ export class Blobs {
     this.lastStep = sim.steps;
     this.fill(sim.prey, world, this.prey, this.preyEyes, null, colorMode, stepsPassed);
     this.fill(sim.hunters, world, this.hunters, this.hunterEyes, this.brows, colorMode, stepsPassed);
+    this.preyInk.count = this.prey.count;
+    this.hunterInk.count = this.hunters.count;
     this.updatePoofs(sim);
     this.updateRings(cursors);
   }

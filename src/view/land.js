@@ -6,25 +6,27 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { CONFIG } from '../config.js';
 import { fbm } from '../noise.js';
+import { applyShading } from './shading.js';
 
 // Palette (sRGB hex, converted to linear by THREE.Color).
 const rgb = (hex) => new THREE.Color(hex).toArray();
+const P = CONFIG.palette;
 const PAL = {
-  bed: rgb(0xc2b184),
-  bedDeep: rgb(0x6d6a57),
-  sand: rgb(0xe0cf9f),
-  soilLow: rgb(0x8f7c5b),
-  soilHigh: rgb(0xa39277),
-  rock: rgb(0xaaa59c),
-  snow: rgb(0xf4f3ee),
-  meadow: rgb(0x79ad55),
-  lush: rgb(0x4e8d39),
-  path: rgb(0xdcc59a),
-  pile: rgb(0x6b4f36),
-  fear: rgb(0xe0563f),
-  sideTop: rgb(0x8c7052),
-  sideBottom: rgb(0x564334),
+  bed: rgb(P.bed),
+  bedDeep: rgb(P.bedDeep),
+  sand: rgb(P.sand),
+  soilLow: rgb(P.soilLow),
+  soilHigh: rgb(P.soil),
+  rock: rgb(P.rock),
+  snow: rgb(P.snow),
+  meadow: rgb(P.meadow),
+  lush: rgb(P.lush),
+  path: rgb(P.path),
+  pile: rgb(P.pile),
 };
+
+const MEADOW = new THREE.Color(P.meadow);
+const LUSH = new THREE.Color(P.lush);
 
 const smooth = (a, b, x) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -37,14 +39,15 @@ const mixInto = (out, c, t) => {
 };
 
 export class Land {
-  constructor(scene, world) {
+  constructor(scene, world, shade) {
     this.scene = scene;
+    this.shade = shade;
     this.group = new THREE.Group();
     scene.add(this.group);
-    this.build(world);
+    this.build(world, shade);
   }
 
-  build(world) {
+  build(world, shade = this.shade) {
     this.group.clear();
     const { width: W, height: H } = world;
     const cell = world.cell;
@@ -74,25 +77,74 @@ export class Land {
     geo.setIndex(index);
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    // What the ground remembers: red is how worn a place is, green is how much hunter
+    // scent is lying on it. The shader draws from this, so the island ends up marked
+    // with the creatures' own history rather than merely tinted by it.
+    this.history = new Uint8Array(world.gw * world.gh * 2);
+    this.historyMap = new THREE.DataTexture(this.history, world.gw, world.gh, THREE.RGFormat, THREE.UnsignedByteType);
+    this.historyMap.minFilter = this.historyMap.magFilter = THREE.LinearFilter;
+    this.historyMap.wrapS = this.historyMap.wrapT = THREE.ClampToEdgeWrapping;
+    this.historyMap.needsUpdate = true;
+
+    const I = CONFIG.view.ink;
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, envMapIntensity: 0.75 });
-    // Faint contour lines, like a topographic map.
+    this.terrainUniforms = {
+      uContour: { value: 0.025 * VS },
+      uHistory: { value: this.historyMap },
+      uHalfBoard: { value: new THREE.Vector2(W / 2, H / 2) },
+      uGrid: { value: new THREE.Vector2(world.gw, world.gh) },
+      uCell: { value: cell },
+      uStroke: { value: I.stroke },
+      uWash: { value: I.wash },
+      uBleed: { value: I.bleed },
+      uInk: { value: new THREE.Color(P.ink) },
+      uFear: { value: new THREE.Color(P.fear) },
+      uShowScent: { value: 1 },
+    };
     mat.onBeforeCompile = (shader) => {
-      shader.uniforms.uContour = { value: 0.025 * VS };
+      Object.assign(shader.uniforms, this.terrainUniforms);
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', '#include <common>\nvarying float vHeight;')
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvHeight = position.y;');
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', '#include <common>\nvarying float vHeight;\nuniform float uContour;')
+        .replace(
+          '#include <common>',
+          `#include <common>
+          varying float vHeight;
+          uniform sampler2D uHistory;
+          uniform vec2 uHalfBoard, uGrid;
+          uniform float uContour, uCell, uStroke, uWash, uBleed, uShowScent;
+          uniform vec3 uInk, uFear;`,
+        )
         .replace(
           '#include <color_fragment>',
           `#include <color_fragment>
+          // Faint contour lines, like a map drawn of the place.
           float cl = vHeight / uContour;
           float fw = max(fwidth(cl), 1e-4);
           float d = abs(fract(cl + 0.5) - 0.5);
           float line = (1.0 - smoothstep(0.5 * fw, 1.5 * fw, d)) * (1.0 - smoothstep(0.25, 0.7, fw));
-          diffuseColor.rgb *= 1.0 - 0.07 * line;`,
+          diffuseColor.rgb *= 1.0 - 0.07 * line;
+
+          vec2 hc = (vWorldPos.xz + uHalfBoard) / uCell + 0.5;
+          vec2 huv = hc / uGrid;
+
+          // A worn path is inked along its edges, where the ground falls away into it.
+          float worn = texture2D(uHistory, huv).r;
+          float stroke = clamp(length(vec2(dFdx(worn), dFdy(worn))) * 26.0, 0.0, 1.0);
+          diffuseColor.rgb = mix(diffuseColor.rgb, uInk, stroke * uStroke);
+
+          // Hunter scent is a wash: its edge is pulled about by noise so it bleeds like
+          // paint into wet paper, and it dries darker where it stops.
+          vec2 warp = (vec2(fbm2(vWorldPos.xz * 0.02), fbm2(vWorldPos.xz * 0.02 + 11.3)) - 0.5) * uBleed / uCell;
+          float scent = texture2D(uHistory, (hc + warp) / uGrid).g;
+          float wash = smoothstep(0.03, 0.45, scent) * uShowScent;
+          float edge = clamp(length(vec2(dFdx(wash), dFdy(wash))) * 9.0, 0.0, 1.0);
+          diffuseColor.rgb = mix(diffuseColor.rgb, uFear, wash * uWash * 0.75);
+          diffuseColor.rgb = mix(diffuseColor.rgb, uFear * 0.55, edge * uWash);`,
         );
     };
+    applyShading(mat, shade, { toon: true, rim: false, clouds: true });
     this.surface = new THREE.Mesh(geo, mat);
     this.surface.receiveShadow = true;
     this.surface.frustumCulled = false;
@@ -144,10 +196,8 @@ export class Land {
     // aTuft = (how grown 0–1, ground height, full blade height, tuft width). Applied
     // before the instance transform (which only turns and widens), so shadows line up.
     tuftMat.onBeforeCompile = (shader) => {
-      shader.uniforms.uTime = { value: 0 };
       shader.uniforms.uRoot = { value: new THREE.Vector3(...CONFIG.view.grass.root) };
       shader.uniforms.uTip = { value: new THREE.Vector3(...CONFIG.view.grass.tip) };
-      tuftMat.userData.uniforms = shader.uniforms;
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', '#include <common>\nattribute vec4 aTuft;\nattribute float aBlade;\nuniform float uTime;\nvarying float vBlade;')
         .replace(
@@ -171,6 +221,7 @@ export class Land {
         .replace('#include <common>', '#include <common>\nuniform vec3 uRoot, uTip;\nvarying float vBlade;')
         .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= mix(uRoot, uTip, vBlade);');
     };
+    applyShading(tuftMat, shade, { toon: false, rim: true, clouds: true });
     this.tuftMat = tuftMat;
     // One tuft per grid cell, wide enough to overlap its neighbours: a carpet, not spikes.
     const tx = nx, ty = ny;
@@ -198,7 +249,9 @@ export class Land {
       this.tuftAttr.array[v * 4 + 3] = w;
       // Big, soft patches of lighter and darker grass, the way a field actually looks.
       const patch = fbm(sx * 0.009, sy * 0.009, 3, 0x9e3779b9);
-      this.tufts.setColorAt(v, color.setHSL(G.hue + rand() * 0.05, 0.5 + rand() * 0.16, Math.min(0.46, Math.max(0.17, 0.3 + patch * 0.5 + rand() * 0.05))));
+      color.copy(MEADOW).lerp(LUSH, Math.min(1, Math.max(0, 0.5 - patch * 1.3)));
+      color.multiplyScalar(0.78 + patch * 0.5 + rand() * 0.12);
+      this.tufts.setColorAt(v, color);
     }
     this.tufts.receiveShadow = true;
     this.tufts.frustumCulled = false;
@@ -206,8 +259,8 @@ export class Land {
   }
 
   // Reshape and recolour everything from the simulation's fields.
-  update(world, { showScent = true, time = 0 } = {}) {
-    if (this.tuftMat.userData.uniforms) this.tuftMat.userData.uniforms.uTime.value = time;
+  update(world, { showScent = true } = {}) {
+    this.terrainUniforms.uShowScent.value = showScent ? 1 : 0;
     const { nx, ny, W, H } = this;
     const VS = CONFIG.view.heightScale, D = CONFIG.dirt.depth, w = CONFIG.world.waterLevel;
     const { base, ground, grass, hunterScent, gw } = world;
@@ -234,7 +287,6 @@ export class Land {
           const dirt = ground[k];
           if (dirt > 0) mixInto(c, PAL.path, smooth(0.04, 0.5, dirt) * 0.85);
           else mixInto(c, PAL.pile, smooth(0.04, 0.5, -dirt) * 0.7);
-          if (showScent) mixInto(c, PAL.fear, Math.min(1, hunterScent[k] * 7) * 0.4);
         }
         col[v * 3] = c[0];
         col[v * 3 + 1] = c[1];
@@ -245,6 +297,14 @@ export class Land {
     g.attributes.position.needsUpdate = true;
     g.attributes.color.needsUpdate = true;
     g.computeVertexNormals();
+
+    // Hand the shader what the ground remembers: how worn, and how much scent.
+    const hist = this.history;
+    for (let k = 0, n = ground.length; k < n; k++) {
+      hist[k * 2] = Math.min(255, Math.max(0, ground[k] * 420));
+      hist[k * 2 + 1] = Math.min(255, Math.max(0, hunterScent[k] * 1400));
+    }
+    this.historyMap.needsUpdate = true;
 
     // Tufts: height follows the grass, and they sit on the current ground.
     const a = this.tuftAttr.array, tp = this.tuftPos;

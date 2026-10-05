@@ -53,6 +53,8 @@ These came out of the rules; none of them are written into the code:
 - **Coastal herds.** Prey crowd the shore, where the grass grows best — which is also where hunters wait.
 - **A landscape of fear.** Hunter scent lingers as a red haze. Prey avoid it, so grass grows back where hunters patrol.
 - **Panic waves** ripple through herds (panicking prey go pale and wide-eyed).
+- **A map of itself.** Leave it running and the island ends up drawn on: paths inked in along their edges, a red wash
+  wherever the hunters have been. None of that is painted on by hand; it is the creatures' own record of where they went.
 
 ## Controls
 
@@ -74,7 +76,8 @@ These came out of the rules; none of them are written into the code:
 | `?` | rules |
 | `v` | record 12 seconds of video |
 
-URL options: `?seed=123` for a specific world, `?clean` to hide the interface.
+URL options: `?seed=123` for a specific world, `?clean` to hide the interface, `?time=0.72` to start at a
+particular hour (0.5 is noon, 0.85 is dusk, 0 is the middle of the night).
 
 ## Running it
 
@@ -107,7 +110,10 @@ Needs a browser with WebGL2 (any current Chrome, Edge, Firefox or Safari). [Thre
 | `src/sim.js` | birth, death, catching, immigration, stats; runs without a browser |
 | `src/view/stage.js` | renderer, lights, camera, orbit controls, the bloom pass and the buffer the water refracts |
 | `src/view/sky.js` | the procedural sky: the backdrop, the light that fills the shadows, and what the sea reflects |
-| `src/view/glsl.js` | the noise the shaders share: foam that scallops, wind that gusts |
+| `src/view/glsl.js` | the noise the shaders share: foam that scallops, wind that gusts, weather that drifts |
+| `src/view/daylight.js` | the clock: where the sun is, what colour it is, and what the sky does about it |
+| `src/view/shading.js` | the look every lit thing shares: cloud shadow, stepped light, backlight |
+| `src/view/dof.js` | the depth of field that makes the island read as something on a table |
 | `src/view/water.js` | the sea: Gerstner waves on a camera-centred grid, refraction, depth colour and surf |
 | `src/view/land.js` | the island: terrain mesh rebuilt from the simulation's grid, and the grass |
 | `src/view/blobs.js` | the creatures as instanced blobs with eyes (and brows), catch poofs, cursor rings |
@@ -141,7 +147,26 @@ carpet, dark at the root and bright at the tip, with the lighter and darker patc
 waves travel across the island so whole patches lean together, and the blades shrink as they are grazed. They are left out of
 the buffer the water refracts, since nothing growing above the waterline is under it.
 
-That is one extra half-size pass, and it leaves the frame about five times inside its budget.
+**The light.** One clock runs the whole picture. The sun climbs, crosses and sets over seven minutes, and the sky's three
+colours, the fill in the shadows, the exposure and the colour of the sea all come off the same few keyframes, so dusk turns the
+water orange without the water knowing what time it is. After sunset the key light becomes the moon — the same direction
+mirrored up through the horizon — because a simulation nobody can see is not worth watching. The sky is baked into a cube map
+to light the shaded sides of things, and re-baked a few times a second as it changes.
+
+There are no clouds overhead, but their shadows cross the island: a noise field drifting over the ground, taking the sun away
+and leaving the sky's fill alone, which is what a cloud actually does. It costs one noise lookup and does more for the sense of
+scale than anything else here.
+
+**The drawing.** The ground takes its sunlight in three steps rather than a smooth ramp, with the edges between them jittered
+by noise so they wobble like a painted edge instead of following a contour. Grass and creatures catch a rim of light when the
+sun is behind them. Each creature is drawn round with a line — the same body, a little bigger, inside out, so all that shows of
+it is the edge. And everything on screen takes its colour from one palette at the top of `config.js`, which is the cheapest way
+to look designed rather than assembled.
+
+Three of those — outlines, stepped light and depth of field — can stack up into something that reads as a filter applied to a
+3D scene rather than a picture. They are each deliberately understated for that reason.
+
+All of it is one extra half-size pass and one blur, and it leaves the frame about five times inside its budget.
 
 To regenerate the teaser: serve the folder, then `node tools/render-hunt.cjs scan 314` to list the best hunts in that world and
 `node tools/render-hunt.cjs render …` to film one (both commands are printed for you, with the ffmpeg lines, at the top of the

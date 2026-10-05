@@ -122,7 +122,7 @@ uniform sampler2D uScene, uSceneDepth;
 uniform vec2 uResolution;
 uniform float uNear, uFar, uRefract;
 uniform float uClear, uBand, uBandSoft, uFoamWidth, uFoamScale, uFoamSpeed, uSky;
-uniform vec3 uShallow, uDeep, uFoam;
+uniform vec3 uShallow, uDeep, uFoam, uLight;
 varying vec3 vWorld;
 varying vec3 vSwellNormal;
 varying float vViewZ;
@@ -165,7 +165,8 @@ void main() {
 
   // Flat bands of colour laid over the bottom: clear at the very edge, then one tone
   // for the shallows and one for the deep.
-  vec3 band = mix(uShallow, uDeep, smoothstep(uBand - uBandSoft, uBand + uBandSoft, depth));
+  // The bands are flat colours, so they have to be told what time of day it is.
+  vec3 band = mix(uShallow, uDeep, smoothstep(uBand - uBandSoft, uBand + uBandSoft, depth)) * uLight;
   vec3 body = mix(behind, band, smoothstep(0.0, uClear, depth));
 
   // A little sky at grazing angles, so the sea still sits under this sky. No sun
@@ -182,7 +183,7 @@ void main() {
   float edge = 1.0 - smoothstep(0.0, w, depth);
   float foam = smoothstep(grain - 0.07, grain + 0.07, edge);
 
-  vec3 color = mix(mix(body, refl, f), uFoam, foam);
+  vec3 color = mix(mix(body, refl, f), uFoam * uLight, foam);
 
   // Far out, give way to the haze on the horizon so the sea has no edge.
   float haze = smoothstep(1200.0, 9000.0, dist);
@@ -224,6 +225,7 @@ export class Ocean {
       uFoamScale: { value: O.foamScale },
       uFoamSpeed: { value: O.foamSpeed },
       uSky: { value: O.sky },
+      uLight: { value: new THREE.Color(1, 1, 1) },
       uShallow: { value: new THREE.Color(O.shallow) },
       uDeep: { value: new THREE.Color(O.deep) },
       uFoam: { value: new THREE.Color(O.foam) },

@@ -142,6 +142,27 @@ export const CONFIG = {
     immigrationEvery: 90,
   },
 
+  // One palette. Everything that is drawn takes its colour from here, so the island,
+  // the sea, the creatures and the light all belong to the same picture.
+  palette: {
+    sand: 0xe8d6a8,
+    soil: 0xb2956a,
+    soilLow: 0x8a7050,
+    rock: 0x9a9287,
+    snow: 0xf2efe6,
+    meadow: 0x79a84e,
+    lush: 0x4d8a3a,
+    bed: 0xcbb98c,       // the sea bed, in the shallows…
+    bedDeep: 0x7d7560,   // …and further down
+    seaShallow: 0x43bfc0,
+    seaDeep: 0x15577f,
+    foam: 0xdff0f3,
+    ink: 0x25262b,       // outlines, and the strokes along a worn path
+    fear: 0xd4503f,      // the wash a hunter leaves behind
+    path: 0xdcc9a0,
+    pile: 0x6b4f36,
+  },
+
   // How the 3D board is drawn.
   view: {
     heightScale: 145,     // ground height 0–1 becomes this many units tall
@@ -176,6 +197,58 @@ export const CONFIG = {
       deep: 0x12577e,     // …and over deep water
       foam: 0xd9eef3,
       floor: 0x6b6450,    // the sea bed outside the board
+    },
+
+    // The sun goes round. Everything else — sky, water, shadows, exposure — follows it.
+    daylight: {
+      dayLength: 420,    // seconds of simulation time for one full cycle
+      start: 0.36,       // where the clock starts; 0.5 is noon
+      sunrise: 0.15,
+      sunset: 0.85,
+      maxElevation: 1.08,
+      minElevation: 0.12, // never quite touch the horizon, or shadows stretch off the map
+      rebakeEvery: 45,    // frames between re-bakes of the sky's light
+      // at: where in the day. sun/moon: how strong the key light is. amb: the sky's fill.
+      stops: [
+        { at: 0.0,  sun: 0,    moon: 0.5,  amb: 0.5,  exposure: 1.3,  key: 0x9fc4ff, zenith: 0x0b1733, horizon: 0x1d2f4e, haze: 0x16233a },
+        { at: 0.15, sun: 0.9,  moon: 0.12, amb: 0.62, exposure: 1.15, key: 0xff9a60, zenith: 0x2d4f8c, horizon: 0xf2a877, haze: 0xd59274 },
+        { at: 0.3,  sun: 2.5,  moon: 0,    amb: 0.84, exposure: 1.0,  key: 0xffe3bd, zenith: 0x2f72c8, horizon: 0xcfe2ee, haze: 0xb6cfe0 },
+        { at: 0.5,  sun: 3.1,  moon: 0,    amb: 0.95, exposure: 0.95, key: 0xfff2da, zenith: 0x2a6ec8, horizon: 0xc6dcea, haze: 0x9fbdd2 },
+        { at: 0.7,  sun: 2.5,  moon: 0,    amb: 0.84, exposure: 1.0,  key: 0xffdcae, zenith: 0x2f6cbe, horizon: 0xd8dfe6, haze: 0xbcc9d6 },
+        { at: 0.85, sun: 0.9,  moon: 0.12, amb: 0.62, exposure: 1.15, key: 0xff8a4e, zenith: 0x27508f, horizon: 0xf39a63, haze: 0xcf8b73 },
+        { at: 1.0,  sun: 0,    moon: 0.5,  amb: 0.5,  exposure: 1.3,  key: 0x9fc4ff, zenith: 0x0b1733, horizon: 0x1d2f4e, haze: 0x16233a },
+      ],
+    },
+
+    // Cloud shadows drifting over the island. There are no clouds in the sky; this is
+    // the shadow of weather passing, which is the part you actually notice.
+    clouds: {
+      scale: 0.0016,     // size of the patches
+      speed: [5.5, 2.2], // how fast they drift, in units per second
+      amount: 0.38,      // how much of the sun a patch takes away
+      coverage: 0.56,    // more means more sky is clouded
+      softness: 0.3,     // how soft the edge of a patch is
+    },
+
+    // Light on the ground in steps rather than a smooth ramp, the way it would be
+    // painted. The band edges are jittered by noise so they wobble instead of
+    // following a perfect contour.
+    toon: { steps: 3, jitter: 0.1, jitterScale: 0.02, floor: 0.32 },
+
+    // Sun coming through a blade of grass, or round the edge of a creature.
+    rim: { power: 2.2, strength: 0.75 },
+
+    // A drawn line round the creatures.
+    outline: { thickness: 0.22, opacity: 0.8 },
+
+    // Enough depth of field to read as something small on a table.
+    dof: { strength: 1, range: 1200, maxBlur: 4 },
+
+    // What the ground remembers, drawn rather than tinted.
+    ink: {
+      stroke: 0.55,    // how dark the line along the edge of a worn path is
+      wash: 0.5,       // how strong the hunters' wash is
+      bleed: 9,        // how far its edge wanders, in units
     },
 
     // Post-processing.

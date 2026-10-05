@@ -12,6 +12,8 @@
 //     -loop 0 teaser/common-ground-teaser.gif
 //   gifsicle -O3 --lossy=40 -b teaser/common-ground-teaser.gif
 //
+// Set TIME to pick the hour the catch is filmed at: 0.5 is noon, 0.72 is late afternoon.
+//
 // A world is deterministic for its seed, so `scan` runs ahead, notes every catch and scores it
 // (how many prey were around, whether another hunter was close, dry land, away from the edge),
 // and `render` replays the same world and starts filming a few seconds before the catch you
@@ -21,6 +23,7 @@ const fs = require('fs');
 const { chromium } = require('playwright-core');
 
 const BASE = process.env.BASE || 'http://127.0.0.1:8000';
+const TIME = process.env.TIME || '';
 const FPS = 20;
 
 // Simulation steps per frame: real time (3) while the camera flies in, slow motion (1)
@@ -46,7 +49,7 @@ async function open(seed) {
   const browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--enable-gpu', '--ignore-gpu-blocklist'] });
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1.5 });
   page.on('pageerror', (e) => console.error('page error:', e.message));
-  await page.goto(`${BASE}/index.html?capture&clean&seed=${seed}`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}/index.html?capture&clean&seed=${seed}${TIME ? `&time=${TIME}` : ''}`, { waitUntil: 'networkidle' });
   return { browser, page };
 }
 

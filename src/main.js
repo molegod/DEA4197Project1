@@ -15,6 +15,8 @@ const params = new URLSearchParams(location.search);
 const CAPTURE = params.has('capture'); // stepped from outside, for rendering teasers
 const $ = (sel) => document.querySelector(sel);
 if (params.has('clean')) document.body.classList.add('clean');
+// ?time=0.5 for noon, 0.85 for dusk, 0 for the middle of the night.
+if (params.has('time')) CONFIG.view.daylight.start = Number(params.get('time')) || 0;
 
 const seed = params.has('seed') ? Number(params.get('seed')) >>> 0 : (Math.random() * 2 ** 32) >>> 0;
 const sim = new Simulation({ width: CONFIG.world.width, height: CONFIG.world.height, seed });
@@ -29,11 +31,13 @@ try {
   $('#fatal').textContent = `Sorry — this needs WebGL. (${err.message})`;
   throw err;
 }
-const land = new Land(stage.scene, sim.world);
+const land = new Land(stage.scene, sim.world, stage.shade);
 const ocean = new Ocean(stage.scene, sim.world, stage.sky.uniforms);
-const blobs = new Blobs(stage.scene);
+const blobs = new Blobs(stage.scene, stage.shade);
 stage.setWater(ocean);
 stage.hideFromWater(land.tufts);
+stage.hideFromWater(blobs.preyInk);
+stage.hideFromWater(blobs.hunterInk);
 const hud = new Hud($('#hud'));
 window.addEventListener('resize', () => stage.resize());
 
@@ -315,7 +319,7 @@ let frameNo = 0, landStep = -1;
 function render(forceLand = false) {
   // The ground changes slowly: reshape it every few frames.
   if (forceLand || landDirty || (frameNo % 3 === 0 && sim.steps !== landStep)) {
-    land.update(sim.world, { showScent: state.showScent, time: sim.steps * CONFIG.step });
+    land.update(sim.world, { showScent: state.showScent });
     ocean.syncDepth(sim.world);
     landStep = sim.steps;
     landDirty = false;
@@ -325,7 +329,7 @@ function render(forceLand = false) {
   ocean.update(sim.steps * CONFIG.step, stage.camera);
   updateFollow();
   blobs.update(sim, { colorMode: state.colorMode, cursors: cursorRings() });
-  stage.render();
+  stage.render(sim.steps * CONFIG.step);
 }
 
 let last = performance.now(), acc = 0, hudAt = 0;

@@ -4,7 +4,7 @@
 
 import * as THREE from 'three';
 
-// Direction toward the sun. The key light in stage.js is placed along this.
+// Where the sun starts. From then on daylight.js moves it.
 export const SUN_DIR = new THREE.Vector3(-0.52, 0.66, -0.3).normalize();
 
 // Colors are written as sRGB hex and held in linear space, like every other THREE.Color.
@@ -65,18 +65,25 @@ export class Sky {
     scene.add(this.dome);
 
     // Bake the same sky into a cube map: this is what lights the shaded sides of
-    // everything, instead of a flat ambient term.
-    const bakeScene = new THREE.Scene();
-    bakeScene.add(
+    // everything, instead of a flat ambient term. As the day moves the sky changes, so
+    // this gets baked again every so often.
+    this.scene = scene;
+    this.bakeScene = new THREE.Scene();
+    this.bakeScene.add(
       new THREE.Mesh(
         new THREE.SphereGeometry(10, 32, 16),
         new THREE.ShaderMaterial({ uniforms: this.uniforms, vertexShader: VERT, fragmentShader: frag(2), side: THREE.BackSide, depthWrite: false, fog: false }),
       ),
     );
-    const pmrem = new THREE.PMREMGenerator(renderer);
-    this.envTarget = pmrem.fromScene(bakeScene, 0, 0.1, 100);
-    pmrem.dispose();
-    bakeScene.children[0].geometry.dispose();
-    scene.environment = this.envTarget.texture;
+    this.pmrem = new THREE.PMREMGenerator(renderer);
+    this.envTarget = null;
+    this.rebake();
+  }
+
+  rebake() {
+    const old = this.envTarget;
+    this.envTarget = this.pmrem.fromScene(this.bakeScene, 0, 0.1, 100);
+    this.scene.environment = this.envTarget.texture;
+    if (old) old.dispose();
   }
 }

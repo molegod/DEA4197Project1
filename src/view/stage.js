@@ -11,8 +11,12 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { CONFIG } from '../config.js';
 import { Sky, SUN_DIR } from './sky.js';
+import { Daylight } from './daylight.js';
+import { shadingUniforms } from './shading.js';
+import { DepthOfFieldShader } from './dof.js';
 
 export class Stage {
   constructor(canvas, { width, height }) {
@@ -35,7 +39,8 @@ export class Stage {
     // shaded sides pick up blue from above and warm bounce from the horizon.
     this.sky = new Sky(scene, renderer);
     scene.environmentIntensity = 0.75;
-    scene.add(new THREE.HemisphereLight(0xe4edff, 0x6b5a44, 0.35));
+    const hemi = new THREE.HemisphereLight(0xe4edff, 0x6b5a44, 0.3);
+    scene.add(hemi);
 
     // Sun from the back left, so shadows fall toward the viewer where they can be seen.
     const sun = new THREE.DirectionalLight(0xfff1dc, 3.1);
@@ -56,9 +61,15 @@ export class Stage {
     scene.add(sun);
     this.sun = sun;
     // A soft fill from the front right, so faces aren't in black shade.
-    const fill = new THREE.DirectionalLight(0xdfe8ff, 0.45);
+    const fill = new THREE.DirectionalLight(0xdfe8ff, 0.3);
     fill.position.set(500, 300, 700);
     scene.add(fill);
+
+    // One clock for the sun, the sky, the fill and the exposure, and one set of
+    // uniforms that every lit material in the scene shares.
+    this.shade = shadingUniforms();
+    this.daylight = new Daylight({ sky: this.sky, sun, hemi, scene, renderer });
+    this.time = 0;
 
     const controls = new OrbitControls(this.camera, canvas);
     controls.enableDamping = true;
@@ -77,6 +88,11 @@ export class Stage {
       new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }),
     );
     this.composer.addPass(new RenderPass(scene, this.camera));
+    this.dof = new ShaderPass(DepthOfFieldShader);
+    this.dof.uniforms.uStrength.value = CONFIG.view.dof.strength;
+    this.dof.uniforms.uRange.value = CONFIG.view.dof.range;
+    this.dof.uniforms.uMaxBlur.value = CONFIG.view.dof.maxBlur;
+    this.composer.addPass(this.dof);
     this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), B.strength, B.radius, B.threshold);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
@@ -115,6 +131,7 @@ export class Stage {
       this.water.uniforms.uNear.value = this.camera.near;
       this.water.uniforms.uFar.value = this.camera.far;
     }
+    this.dof.uniforms.uTexel.value.set(1 / (w * dpr), 1 / (h * dpr));
     this.camera.aspect = w / h;
     // Keep the whole board in view on narrow screens.
     this.camera.fov = w / h < 1 ? 58 : 36;
@@ -144,13 +161,29 @@ export class Stage {
     this.water = ocean;
     ocean.uniforms.uScene.value = this.sceneTarget.texture;
     ocean.uniforms.uSceneDepth.value = this.sceneTarget.depthTexture;
+    this.dof.uniforms.tDepth.value = this.sceneTarget.depthTexture;
     this.resize();
   }
 
-  render() {
+  render(seconds = this.time) {
+    this.time = seconds;
     this.controls.update();
     this.clampTarget();
+    this.camera.updateMatrixWorld();
     this.sky.dome.position.copy(this.camera.position);
+
+    // Move the day on, then hand the new sun to every material that is lit by it.
+    this.daylight.update(seconds, this.camera);
+    this.shade.uTime.value = seconds;
+    this.shade.uSunView.value.copy(this.daylight.viewDir);
+    this.shade.uKey.value.copy(this.sun.color).multiplyScalar(this.sun.intensity);
+
+    if (this.water) this.water.uniforms.uLight.value.copy(this.daylight.light);
+
+    // Focus on whatever the camera is pointed at.
+    this.dof.uniforms.uFocus.value = this.camera.position.distanceTo(this.controls.target);
+    this.dof.uniforms.uNear.value = this.camera.near;
+    this.dof.uniforms.uFar.value = this.camera.far;
     this.renderer.shadowMap.needsUpdate = true;
     if (this.water) {
       this.water.surface.visible = false;
