@@ -87,6 +87,7 @@ export class Stage {
     const depth = new THREE.DepthTexture(1, 1, THREE.UnsignedIntType);
     this.sceneTarget = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthTexture: depth });
     this.water = null;
+    this.skipInRefraction = [];
 
     this.raycaster = new THREE.Raycaster();
     this.ndc = new THREE.Vector2();
@@ -132,6 +133,12 @@ export class Stage {
     }
   }
 
+  // Things that never sit under the water don't need drawing into the buffer the water
+  // refracts, and the grass is most of the scene's triangles.
+  hideFromWater(object) {
+    this.skipInRefraction.push(object);
+  }
+
   // Hand the ocean the buffers it refracts, and keep it in step with the canvas.
   setWater(ocean) {
     this.water = ocean;
@@ -147,11 +154,13 @@ export class Stage {
     this.renderer.shadowMap.needsUpdate = true;
     if (this.water) {
       this.water.surface.visible = false;
+      for (const o of this.skipInRefraction) o.visible = false;
       this.renderer.setRenderTarget(this.sceneTarget);
       this.renderer.clear();
       this.renderer.render(this.scene, this.camera);
       this.renderer.setRenderTarget(null);
       this.water.surface.visible = true;
+      for (const o of this.skipInRefraction) o.visible = true;
     }
     this.composer.render();
   }

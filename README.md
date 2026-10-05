@@ -107,6 +107,7 @@ Needs a browser with WebGL2 (any current Chrome, Edge, Firefox or Safari). [Thre
 | `src/sim.js` | birth, death, catching, immigration, stats; runs without a browser |
 | `src/view/stage.js` | renderer, lights, camera, orbit controls, the bloom pass and the buffer the water refracts |
 | `src/view/sky.js` | the procedural sky: the backdrop, the light that fills the shadows, and what the sea reflects |
+| `src/view/glsl.js` | the noise the shaders share: foam that scallops, wind that gusts |
 | `src/view/water.js` | the sea: Gerstner waves on a camera-centred grid, refraction, depth colour and surf |
 | `src/view/land.js` | the island: terrain mesh rebuilt from the simulation's grid, and the grass |
 | `src/view/blobs.js` | the creatures as instanced blobs with eyes (and brows), catch poofs, cursor rings |
@@ -123,13 +124,24 @@ The island is the same noise as before, faded out into a sea bed by a mask that 
 the compass for headlands and coves, one read across the board so it isn't a disc. How many creatures a world starts with is
 worked out from how much dry land that mask left.
 
-**How it's drawn.** Real ray tracing isn't available in a browser, so the things that actually make a difference here are:
-a procedural sky baked into a cube map, which lights every shaded side instead of a flat ambient term; a filmic tone map and a
-bloom pass, so bright things spill the way a camera does; and water that earns its keep. The sea is four Gerstner waves on a
-disc of triangles re-centred on the camera every frame, so the mesh is dense underfoot and coarse at the horizon. Before the
-water is drawn the scene goes into a half-size buffer, and the water shader reads it back bent by the wave slope and dimmed
-with depth — red first, then green — so sand shows through the shallows, the deep goes blue, and anything wading gets surf
-around it. That is one extra half-size pass, and the whole thing holds 60 fps.
+**How it's drawn.** Real ray tracing isn't available in a browser, so what actually makes the difference here is a procedural
+sky baked into a cube map, which lights every shaded side instead of a flat ambient term, and a filmic tone map with a bloom
+pass so bright things spill the way a camera does.
+
+The sea is painted rather than photographed. Four Gerstner waves displace a disc of triangles that is re-centred on the camera
+every frame, so the mesh is dense underfoot and coarse at the horizon. Before the water is drawn the scene goes into a
+half-size buffer; the water shader reads that back, bent by the slope of the surface, and then lays flat bands of colour over
+it — the bottom shows through at the very edge, then one tone for the shallows and one for the deep. Where the water runs out
+it breaks into foam whose edge is cut by drifting noise, so the shore scallops instead of repeating, and its width is measured
+in pixels rather than in depth, or a gently shelving beach would turn the line into a blanket. There is deliberately no sun
+glitter: a regular highlight on a regular swell is exactly what makes a sea look tiled.
+
+The grass is a tuft of tapered blades on every cell of the simulation's grid, wide enough to overlap its neighbours into a
+carpet, dark at the root and bright at the tip, with the lighter and darker patches of a real field coming from noise. Two long
+waves travel across the island so whole patches lean together, and the blades shrink as they are grazed. They are left out of
+the buffer the water refracts, since nothing growing above the waterline is under it.
+
+That is one extra half-size pass, and it leaves the frame about five times inside its budget.
 
 To regenerate the teaser: serve the folder, then `node tools/render-hunt.cjs scan 314` to list the best hunts in that world and
 `node tools/render-hunt.cjs render …` to film one (both commands are printed for you, with the ffmpeg lines, at the top of the

@@ -149,6 +149,14 @@ export const CONFIG = {
     preySize: [7.2, 9],   // blob width, height
     hunterSize: [10.5, 14],
 
+    // The grass.
+    grass: {
+      height: [6, 11],    // blade height in view units, per tuft
+      hue: 0.22,          // base hue; lightness comes from big noise patches
+      root: [0.4, 0.46, 0.34],  // the blade's colour is multiplied by this at the root…
+      tip: [1.3, 1.36, 0.92],   // …and by this at the tip
+    },
+
     // The sea around the island.
     ocean: {
       size: 24000,        // how far the water reaches (the sky dome is further still)
@@ -157,9 +165,16 @@ export const CONFIG = {
       waveScale: 0.8,     // height of the swell (wave 1 is 2.6 × this, in view units)
       steepness: 0.6,     // how much crests gather, Gerstner's Q
       refraction: 0.03,   // how far the surface bends what is behind it, in screens
-      extinction: [0.085, 0.034, 0.022], // light lost per unit of depth: red goes first
-      scatter: 0x0f4a66,  // the colour the water itself adds back, deep down
-      foam: 0xf2fbff,
+      clear: 7,           // depth over which the bottom stops showing through
+      band: 26,           // depth where the shallow colour gives way to the deep one
+      bandSoft: 15,       // how soft that change is; small numbers make hard bands
+      foamWidth: 11,      // how wide the line of foam is, in pixels on screen
+      foamScale: 0.035,   // size of the scallops in the foam's edge
+      foamSpeed: 1.1,     // how fast they drift
+      sky: 0.45,          // how much sky the surface picks up at grazing angles
+      shallow: 0x3fc2c8,  // the colour over the shallows
+      deep: 0x12577e,     // …and over deep water
+      foam: 0xd9eef3,
       floor: 0x6b6450,    // the sea bed outside the board
     },
 

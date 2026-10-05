@@ -1,19 +1,23 @@
-// The sea the island sits in.
+// The sea the island sits in, painted rather than photographed.
 //
 // Four Gerstner waves displace a radial grid that is re-centred on the camera every
 // frame, so the triangles are small where you can see them and enormous out at the
-// horizon. The surface is lit by the same sky the dome uses, and the water itself is
-// coloured by what is underneath it: the scene is drawn once into a half-size buffer
-// before the water goes down, and the shader reads that buffer back, bent by the wave
-// normal and dimmed with depth the way real water swallows red light first. Sand shows
-// through in the shallows, the deep goes blue-green, and creatures wading in the
-// shallows get foam around them for free.
+// horizon. The colour is decided by how deep the water is: the scene is drawn once into
+// a half-size buffer before the water goes down, the shader reads that buffer back bent
+// by the wave slope, and then lays flat bands of colour over it — the bottom shows
+// through at the very edge, then one tone for the shallows and one for the deep.
 //
-// There is no planar reflection and no texture to download: one extra half-size pass.
+// Where the water runs out it breaks into foam, and the edge of the foam is cut by
+// drifting noise rather than a wave, so the shore scallops instead of repeating. There
+// is no mirror-bright sun glitter: a regular highlight on a regular swell is exactly
+// what makes a sea look tiled.
+//
+// One extra half-size pass, no planar reflection, and no texture to download.
 
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 import { SKY_GLSL } from './sky.js';
+import { NOISE_GLSL } from './glsl.js';
 
 const DEPTH_SCALE = 90; // deepest water the coarse height texture can express, in view units
 
@@ -113,10 +117,12 @@ const FRAG = /* glsl */ `
 #include <packing>
 ${SKY_GLSL}
 ${WAVES_GLSL}
+${NOISE_GLSL}
 uniform sampler2D uScene, uSceneDepth;
 uniform vec2 uResolution;
 uniform float uNear, uFar, uRefract;
-uniform vec3 uExtinction, uScatter, uFoam;
+uniform float uClear, uBand, uBandSoft, uFoamWidth, uFoamScale, uFoamSpeed, uSky;
+uniform vec3 uShallow, uDeep, uFoam;
 varying vec3 vWorld;
 varying vec3 vSwellNormal;
 varying float vViewZ;
@@ -157,22 +163,26 @@ void main() {
   float depth = max(0.0, vViewZ - sceneViewZ(uvR));
   vec3 behind = texture2D(uScene, uvR).rgb;
 
-  // Beer–Lambert: red goes first, then green, so sand turns turquoise and then blue.
-  vec3 through = exp(-uExtinction * depth);
-  vec3 body = behind * through + uScatter * (1.0 - through);
+  // Flat bands of colour laid over the bottom: clear at the very edge, then one tone
+  // for the shallows and one for the deep.
+  vec3 band = mix(uShallow, uDeep, smoothstep(uBand - uBandSoft, uBand + uBandSoft, depth));
+  vec3 body = mix(behind, band, smoothstep(0.0, uClear, depth));
 
-  // Sky in the surface, strongest when you look across it.
-  float f = clamp(0.02 + 0.98 * pow(1.0 - max(dot(view, n), 0.0), 5.0), 0.0, 1.0);
+  // A little sky at grazing angles, so the sea still sits under this sky. No sun
+  // glitter: a regular highlight on a regular swell is what makes a sea look tiled.
+  float f = clamp(pow(1.0 - max(dot(view, n), 0.0), 5.0), 0.0, 1.0) * uSky;
   vec3 refl = skyColor(reflect(-view, n));
-  float spec = pow(max(dot(reflect(-view, n), uSun), 0.0), mix(14.0, 90.0, lod)) * mix(0.35, 1.0, lod);
 
-  // Surf: a thin line where the water runs out, pushed about by the swell. Mixed in
-  // rather than added, so a bright beach underneath can't blow it out into a halo.
-  float wob = 0.5 + 0.5 * sin(dot(normalize(vec2(0.74, 0.67)), vWorld.xz) * 0.085 - uTime * 1.05 + n.x * 26.0);
-  float foam = clamp(smoothstep(0.7, 0.0, depth) * (0.3 + 0.45 * wob), 0.0, 1.0);
+  // Foam, cut against drifting noise: where the noise is low it reaches further out, so
+  // the edge scallops and never repeats. Its width is measured in pixels rather than in
+  // depth, otherwise a gently shelving beach turns the line into a blanket.
+  vec2 drift = vec2(uTime * uFoamSpeed, uTime * uFoamSpeed * -0.7);
+  float grain = fbm2(vWorld.xz * uFoamScale + drift);
+  float w = max(0.2, fwidth(depth) * uFoamWidth);
+  float edge = 1.0 - smoothstep(0.0, w, depth);
+  float foam = smoothstep(grain - 0.07, grain + 0.07, edge);
 
-  vec3 color = mix(body, refl, f) + uSunColor * spec * 1.3;
-  color = mix(color, uFoam, foam * 0.7);
+  vec3 color = mix(mix(body, refl, f), uFoam, foam);
 
   // Far out, give way to the haze on the horizon so the sea has no edge.
   float haze = smoothstep(1200.0, 9000.0, dist);
@@ -207,8 +217,15 @@ export class Ocean {
       uNear: { value: 1 },
       uFar: { value: 1 },
       uRefract: { value: O.refraction },
-      uExtinction: { value: new THREE.Vector3(...O.extinction) },
-      uScatter: { value: new THREE.Color(O.scatter) },
+      uClear: { value: O.clear },
+      uBand: { value: O.band },
+      uBandSoft: { value: O.bandSoft },
+      uFoamWidth: { value: O.foamWidth },
+      uFoamScale: { value: O.foamScale },
+      uFoamSpeed: { value: O.foamSpeed },
+      uSky: { value: O.sky },
+      uShallow: { value: new THREE.Color(O.shallow) },
+      uDeep: { value: new THREE.Color(O.deep) },
       uFoam: { value: new THREE.Color(O.foam) },
     };
 

@@ -33,6 +33,7 @@ const land = new Land(stage.scene, sim.world);
 const ocean = new Ocean(stage.scene, sim.world, stage.sky.uniforms);
 const blobs = new Blobs(stage.scene);
 stage.setWater(ocean);
+stage.hideFromWater(land.tufts);
 const hud = new Hud($('#hud'));
 window.addEventListener('resize', () => stage.resize());
 
@@ -351,14 +352,13 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
+// The pieces, for the console and for the tools in tools/.
+window.commonGround = { sim, state, stage, land, ocean, blobs, config: CONFIG };
+
 if (CAPTURE) {
   // Driven by a script: step the world, place the camera, draw, screenshot, repeat.
   stage.controls.enableDamping = false;
-  window.commonGround = {
-    sim,
-    state,
-    stage,
-    config: CONFIG,
+  Object.assign(window.commonGround, {
     step(n = 1) {
       for (let i = 0; i < n; i++) sim.step();
     },
@@ -374,7 +374,7 @@ if (CAPTURE) {
       render(true);
       hud.update(sim, state);
     },
-  };
+  });
   render(true);
   hud.update(sim, state);
 } else {
